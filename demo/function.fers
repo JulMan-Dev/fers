@@ -2,4 +2,7 @@ let $double = ($x) -> {
     2 $x *
 }
 
-2 $double .
+println: string "\n" + write
+
+(2 $double) println
+2 (^ $double) println
