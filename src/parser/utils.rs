@@ -1,0 +1,51 @@
+use std::rc::Rc;
+use crate::error::{ErrorKind, ErrorStack};
+use crate::parser::ast::{Token, TokenMeta};
+use crate::parser::token::process_token;
+use crate::token::{LexToken, RealToken, TokenList};
+
+pub fn consume_static(input: &TokenList, i: usize, text: &str) -> Option<TokenMeta> {
+    let token = input.1.get(i);
+    
+    if let Some(token) = token {
+        if let LexToken(RealToken::Unknown(k), _, _) = token && k.as_ref() == text {
+            Some(process_token(token))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+pub fn consume_identifier(input: &TokenList, i: usize) -> Result<(usize, Rc<str>), ErrorStack> {
+    if let Some(lex_token) = input.1.get(i) {
+        let LexToken(token, _, _) = lex_token;
+
+        if matches!(token, RealToken::NewLine) {
+            return Err(ErrorStack::new(
+                ErrorKind::UnexpectedEndOfLine,
+                input.0.clone(),
+                lex_token.into(),
+            ));
+        }
+
+        let content = process_token(lex_token);
+
+        if let Token::Identifier(name) = content.token {
+            Ok((1, name))
+        } else {
+            Err(ErrorStack::new(
+                ErrorKind::UnexpectedToken,
+                input.0.clone(),
+                lex_token.into(),
+            ))
+        }
+    } else {
+        Err(ErrorStack::new(
+            ErrorKind::UnexpectedEndOfLine,
+            input.0.clone(),
+            (..input.0.len() - 1).into(),
+        ))
+    }
+}

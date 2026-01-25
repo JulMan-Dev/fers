@@ -1,0 +1,12 @@
+# :include "include.math"
+
+println: string "\n" + write
+
+let $a = 1
+let $b = 2
+
+let $b = $b clone *
+
+$a $b +
+$ println
+$ clone * println

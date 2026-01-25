@@ -1,0 +1,17 @@
+"hello" 10 * "\n" + write
+
+debug: "DEBUG: " $ string "\n" + + write
+
+  1
+$ clone +
+$ "1 "
+$ "1 "
+$ "+"
+$ +
+$ +
+$ eval
+$ *
+$ string
+$ "\n"
+$ +
+$ write

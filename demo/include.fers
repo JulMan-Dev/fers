@@ -1,0 +1,8 @@
+#hello world
+# operators definition
+eq: - boolean neg
+ne: - boolean
+
+square: clone *
+**2: clone *
+println: string "\n" + write
