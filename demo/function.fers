@@ -4,5 +4,4 @@ let $double = ($x) -> {
 
 println: string "\n" + write
 
-(2 $double) println
-2 (^ $double) println
+2 ($double) println
