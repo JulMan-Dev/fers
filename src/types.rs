@@ -239,7 +239,7 @@ impl FromStr for Value {
                     Ok(Value::Boolean(b))
                 } else if let Ok(i) = s.parse() {
                     Ok(Value::Integer(i))
-                } else if let Ok(f) = s.parse() as Result<Decimal, Error> {
+                } else if let Ok(f) = s.parse::<Decimal>() {
                     Ok(Value::Float(f.normalize()))
                 } else {
                     Err(ErrorKind::UnexpectedToken)
