@@ -12,7 +12,8 @@ pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Express
 
     let list: Expression = input.1.iter().skip(i).map_while(|token| {
         if let RealToken::Unknown(ref k) = token.0 {
-            (k.as_ref() != "#").then(|| process_token(token))
+            (!k.starts_with("#"))
+                .then(|| process_token(token))
         } else if matches!(token.0, RealToken::NewLine) {
             None
         } else {
