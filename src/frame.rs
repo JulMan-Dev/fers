@@ -51,6 +51,13 @@ pub mod security {
     /// 
     /// Note: [`ALL_UNSECURED`] doesn't enforce this because it's a security feature.
     pub const SEALED: usize = 8;
+    /// Marks the frame as transparent. A transparent frame will act as if it's a parent frame.
+    /// Any declared locals or macros are delegated to parent.
+    ///
+    /// Implies [`ACCESS_PARENT`].
+    /// 
+    /// Note: [`ALL_UNSECURED`] doesn't enforce.
+    pub const TRANSPARENT: usize = 16 | ACCESS_PARENT;
 }
 
 type FrameAccessResult<T> = Result<T, FrameAccessError>;
@@ -59,13 +66,15 @@ type FrameAccessResult<T> = Result<T, FrameAccessError>;
 pub enum FrameAccessError {
     UnauthorizedAccess,
     InvalidOperation,
+    Orphan,
 }
 
 impl fmt::Display for FrameAccessError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnauthorizedAccess => f.write_str("Unauthorized access to the frame"),
-            Self::InvalidOperation => f.write_str("Invalid operation"),
+            UnauthorizedAccess => f.write_str("Unauthorized access to the frame"),
+            InvalidOperation => f.write_str("Invalid operation"),
+            Orphan => f.write_str("Frame is orphaned"),
         }
     }
 }
@@ -73,8 +82,12 @@ impl fmt::Display for FrameAccessError {
 use FrameAccessError::*;
 
 impl Frame {
+    fn is_security(&self, security: usize) -> bool {
+        self.inner.borrow().security & security == security
+    }
+    
     fn assert_security(&self, security: usize) -> FrameAccessResult<()> {
-        if self.inner.borrow().security & security == security {
+        if self.is_security(security) {
             Ok(())
         } else {
             Err(UnauthorizedAccess)
@@ -142,6 +155,15 @@ impl Frame {
     pub fn push_local(&self, name: Rc<str>, value: Rc<Vec<Value>>) -> FrameAccessResult<()> {
         self.assert_security(security::WRITE)?;
         
+        if self.is_security(security::TRANSPARENT) {
+            // push to parent directly.
+            let Some(parent) = self.inner.borrow().parent.clone() else {
+                return Err(Orphan);
+            };
+            
+            return parent.push_local(name, value);
+        }
+        
         self.inner.borrow_mut().locals.insert(name, value);
         Ok(())
     }
@@ -151,6 +173,15 @@ impl Frame {
     /// Requires [`security::WRITE`] flag.
     pub fn push_macro(&self, name: Rc<str>, expression: Rc<BuiltExpression>) -> FrameAccessResult<()> {
         self.assert_security(security::WRITE)?;
+
+        if self.is_security(security::TRANSPARENT) {
+            // push to parent directly.
+            let Some(parent) = self.inner.borrow().parent.clone() else {
+                return Err(Orphan);
+            };
+
+            return parent.push_macro(name, expression);
+        }
         
         self.inner.borrow_mut().macros.insert(name, expression);
         Ok(())
@@ -161,6 +192,15 @@ impl Frame {
     /// Requires [`security::WRITE`] flag.
     pub fn drop_local(&self, name: &str) -> FrameAccessResult<()> {
         self.assert_security(security::WRITE)?;
+
+        if self.is_security(security::TRANSPARENT) {
+            // drop from parent directly.
+            let Some(parent) = self.inner.borrow().parent.clone() else {
+                return Err(Orphan);
+            };
+
+            return parent.drop_local(name);
+        }
         
         self.inner.borrow_mut().locals.remove(name);
         Ok(())
@@ -171,6 +211,15 @@ impl Frame {
     /// Requires [`security::WRITE`] flag.
     pub fn drop_macro(&self, name: &str) -> FrameAccessResult<()> {
         self.assert_security(security::WRITE)?;
+
+        if self.is_security(security::TRANSPARENT) {
+            // drop from parent directly.
+            let Some(parent) = self.inner.borrow().parent.clone() else {
+                return Err(Orphan);
+            };
+
+            return parent.drop_macro(name);
+        }
         
         self.inner.borrow_mut().macros.remove(name);
         Ok(())
@@ -341,6 +390,11 @@ impl FrameSecurity {
     
     pub fn with_seal(mut self) -> Self {
         self.0 |= security::SEALED;
+        self
+    }
+    
+    pub fn with_transparent(mut self) -> Self {
+        self.0 |= security::TRANSPARENT;
         self
     }
     
