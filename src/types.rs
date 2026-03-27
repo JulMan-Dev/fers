@@ -7,6 +7,8 @@ use std::{
 use rust_decimal::{prelude::Zero, Decimal, Error};
 
 use crate::{
+    frame::Frame,
+    parser::ast::Chunk,
     error::ErrorKind,
     tty::{
         ansi::{NoColor, Style, RESET},
@@ -14,7 +16,7 @@ use crate::{
         simple::Color4,
     },
     utils::integer_to_float,
-    ITALIC,
+    ITALIC
 };
 
 pub type INTEGER = i128;
@@ -59,6 +61,15 @@ pub enum Value {
     Boolean(bool),
     /// Represents a list of values.
     List(Vec<Value>),
+    /// Represents a closure.
+    Closure(Closure),
+}
+
+#[derive(Debug, Clone)]
+pub struct Closure {
+    pub parameters: Rc<[Rc<str>]>,
+    pub body: Rc<Chunk>,
+    pub parent: Frame,
 }
 
 impl Value {
