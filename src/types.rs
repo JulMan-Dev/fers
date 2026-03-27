@@ -165,6 +165,7 @@ pub const TRUE_STYLE: Style<Color4, NoColor> =
     Style::empty().with_green_foreground(false).with_bold();
 pub const FALSE_STYLE: Style<Color4, NoColor> =
     Style::empty().with_red_foreground(false).with_bold();
+pub const FUNCTION_STYLE: Style<Color4, NoColor> = Style::empty().with_bold();
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -233,7 +234,8 @@ impl Display for Value {
 
                 out.push(']');
                 out
-            }
+            },
+            Value::Closure(_) => FUNCTION_STYLE.apply_to("<closure>"),
         })
     }
 }
