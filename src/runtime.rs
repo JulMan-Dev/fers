@@ -1,24 +1,27 @@
 //! The new runtime, Fers engine
 
 use crate::{
-    parser::{ast::{Chunk, Expression, ExpressionStatement, MacroStatement, Statement, Token, TokenMeta, VariableStatement}, parse},
+    parser::{
+        ast::{
+            ClosureExpression, Expression, ExpressionStatement, MacroStatement, MetaStatement, 
+            Statement, Token, TokenMeta, VariableStatement
+        },
+        parse
+    },
+    types::{Closure, Type, Value},
     error::{ErrorKind, ErrorStack},
+    frame::{Frame, FrameSecurity},
+    position::ToRange,
     token::TokenList,
-    types::{Type, Value},
-    utils::VecUtils,
-    file::StateFile,
-    parser::ast::MetaStatement,
-    position::ToRange
+    utils::VecUtils
 };
 use std::{
     cell::RefCell,
-    collections::HashMap,
     fmt,
-    io::stdout,
-    io::{Stdout, Write},
+    fmt::Debug,
+    io::Write,
     rc::Rc
 };
-use std::collections::HashSet;
 
 #[derive(Clone)]
 pub struct State<W>
@@ -40,6 +43,7 @@ pub struct BuiltToken {
 #[derive(Debug, Clone)]
 pub enum BuiltOperation {
     PushValue(Value),
+    PushClosure(ClosureExpression), // requires a frame, cannot be built on fly
     Add,
     Sub,
     Mul,
@@ -55,6 +59,7 @@ pub enum BuiltOperation {
     Macro(Rc<str>),
     KnownMacro(Rc<str>, Rc<BuiltExpression>),
     Variable(Rc<str>),
+    Call(Rc<Expression>),
 }
 
 pub type FastResult = Result<(), ErrorStack>;
@@ -195,6 +200,8 @@ where
         frame: &Frame,
         source: Option<Rc<str>>,
     ) -> FastResult {
+        use BuiltOperation::*;
+        
         let make_error_stack = |kind: ErrorKind| -> ErrorStack {
             ErrorStack::new(
                 kind,
@@ -213,10 +220,19 @@ where
         };
 
         match token.operation {
-            BuiltOperation::PushValue(ref value) => {
+            PushValue(ref value) => {
                 stack.push(value.clone());
             }
-            BuiltOperation::Add => {
+            PushClosure(ref closure) => {
+                let closure = Closure {
+                    parameters: closure.parameters.clone(),
+                    body: closure.body.clone(),
+                    parent: frame.clone(),
+                };
+                
+                stack.push(Value::Closure(closure));
+            }
+            Add => {
                 let Some([left, right]) = stack.take_last_chunk::<2>() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(2, stack.len())));
                 };
@@ -226,7 +242,7 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Sub => {
+            Sub => {
                 let Some([left, right]) = stack.take_last_chunk::<2>() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(2, stack.len())));
                 };
@@ -236,7 +252,7 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Mul => {
+            Mul => {
                 let Some([left, right]) = stack.take_last_chunk::<2>() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(2, stack.len())));
                 };
@@ -246,7 +262,7 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Div => {
+            Div => {
                 let Some([left, right]) = stack.take_last_chunk::<2>() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(2, stack.len())));
                 };
@@ -256,7 +272,7 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Neg => {
+            Neg => {
                 let Some(e) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -266,14 +282,14 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Clone => {
+            Clone => {
                 let Some(e) = stack.last() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
 
                 stack.push(e.clone());
             }
-            BuiltOperation::CastTo(kind) => {
+            CastTo(kind) => {
                 let Some(e) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -349,7 +365,7 @@ where
 
                 stack.extend(new_stack);
             }
-            BuiltOperation::Parse => {
+            Parse => {
                 let Some(value) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -370,7 +386,7 @@ where
 
                 stack.push(value);
             }
-            BuiltOperation::Write => {
+            Write => {
                 let Some(value) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -383,7 +399,7 @@ where
                     }
                 };
             }
-            BuiltOperation::Error(panicking) => {
+            Error(panicking) => {
                 let Some(value) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -417,7 +433,75 @@ where
                     return Err(make_error_stack(ErrorKind::UndefinedVariable));
                 };
                 
-                stack.extend(value.clone());
+                stack.extend(value.iter().cloned());
+            } 
+            Call(ref callee) => {
+                // callee is a token, not a variable.
+                
+                let mut resolve_stack = Vec::new();
+                
+                match self.execute_expression(&callee, &mut resolve_stack, frame, None) {
+                    Ok(()) => (),
+                    Err(err) => return Err(make_error_stack_with_cause(ErrorKind::InMacroExpansion, err)),
+                };
+
+                let Some(to_call) = resolve_stack.pop() else {
+                    return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, resolve_stack.len())));
+                };
+                stack.extend(resolve_stack); // push the rest of the stack.
+                
+                let to_call = match to_call {
+                    Value::Closure(closure) => closure,
+                    _ => return Err(make_error_stack(ErrorKind::InvalidType(to_call.kind()))),
+                };
+                
+                let arity = to_call.parameters.len();
+                
+                // ensuring the arity is correct.
+                if stack.len() < arity {
+                    return Err(make_error_stack(ErrorKind::InvalidNumberArguments(arity, stack.len())));
+                }
+                
+                let child_frame = match to_call.parent.new_child(
+                    to_call.body,
+                    FrameSecurity::new().with_all_unsecured()
+                ) {
+                    Ok(child_frame) => child_frame,
+                    Err(err) => return Err(make_error_stack(ErrorKind::FrameError(err))),
+                };
+                
+                // push the arguments to the child frame.
+                for arg in to_call.parameters.iter().rev() {
+                    child_frame.push_local(
+                        arg.clone(),
+                        Rc::new(vec![stack.pop().expect("Cannot pop arguments from stack")]),
+                    ).expect("Cannot push arguments to child frame");
+                }
+                
+                let result = loop {
+                    let result = self.step(&child_frame);
+
+                    if let Err(ref stack) = result {
+                        // Cannot continue, graceful exit
+                        if matches!(stack.kind(), ErrorKind::EndOfFile) {
+                            break Ok(());
+                        }
+
+                        break Err(stack.clone());
+                    }
+                };
+                
+                match result {
+                    Ok(()) => (),
+                    Err(err) => return Err(make_error_stack_with_cause(ErrorKind::EvaluationError, err)),
+                }
+                
+                // get "$" and push back to the stack.
+                if let Ok(Some(value)) = child_frame.resolve_local("$") {
+                    stack.extend(value.iter().cloned());
+                }
+                
+                drop(child_frame); // no longer needed.
             }
         }
         
@@ -443,7 +527,7 @@ where
 
         let mut tokens = BuiltExpression::new();
 
-        for TokenMeta { token, position } in expression {
+        for TokenMeta { token, position } in expression.iter() {
             let operation = match token {
                 Token::Identifier(identifier) => {
                     match identifier.as_ref() {
@@ -479,6 +563,8 @@ where
                 &Token::Float(dec) => PushValue(dec.into()),
                 Token::String(str) => PushValue(str.clone().into()),
                 &Token::Boolean(b) => PushValue(b.into()),
+                Token::Closure(closure) => PushClosure(closure.clone()),
+                Token::Call(call) => Call(Rc::new(call.callee.clone())),
             };
 
             tokens.push(BuiltToken { position: *position, operation });
