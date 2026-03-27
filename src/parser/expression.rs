@@ -1,25 +1,66 @@
 //! Parses expressions
 
 use crate::{
-    error::ErrorStack,
+    error::{ErrorStack, ErrorKind},
     parser::token::process_token,
     token::{RealToken, TokenList},
-    parser::ast::Expression
+    parser::ast::Expression,
+    parser::closure::consume_closure_or_call,
 };
 
 pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Expression), ErrorStack> {
-    // read all tokens to line end or "#" (after it's an inline comment).
+    // read all tokens to line end, "#" (after it's an inline comment) or ")".
+    
+    // check if the first token is a ")", error if it is.
+    if let Some(token) = input.1.get(i) && 
+        let RealToken::Unknown(ref k) = token.0 &&
+        k.as_ref() == ")" {
+        return Err(ErrorStack::new(
+            ErrorKind::UnexpectedToken,
+            input.0.clone(),
+            token.clone().into(),
+        ));
+    }
 
-    let list: Expression = input.1.iter().skip(i).map_while(|token| {
+    let mut list = Expression::new();
+    
+    let mut consumed = 0;
+    let mut i = i;
+    while let Some(token) = input.1.get(i) {
+        println!("{:?}", token);
+        
         if let RealToken::Unknown(ref k) = token.0 {
-            (!k.starts_with("#"))
-                .then(|| process_token(token))
+            if k.as_ref() == "(" {
+                if let Some(closure) = consume_closure_or_call(input, i) {
+                    let (k, token) = closure?;
+                    
+                    list.push(token);
+                    consumed += k;
+                    i += k;
+                    continue;
+                }
+            }
+            
+            // parenthesis end (closure decl or call)
+            if k.as_ref() == ")" {
+                break;
+            }
+            
+            if !k.starts_with("#") {
+                list.push(process_token(token));
+                consumed += 1;
+                i += 1;
+            } else {
+                break;
+            }
         } else if matches!(token.0, RealToken::NewLine) {
-            None
+            break;
         } else {
-            Some(process_token(token))
+            list.push(process_token(token));
+            consumed += 1;
+            i += 1;
         }
-    }).collect();
+    };
 
-    Ok((list.len(), list))
+    Ok((consumed, list))
 }

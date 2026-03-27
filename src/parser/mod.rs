@@ -6,12 +6,14 @@ pub mod ast;
 pub(crate) mod meta;
 pub(crate) mod variable;
 pub(crate) mod utils;
+pub(crate) mod closure;
 
 use crate::{
     parser::{ast::Chunk, statement::consume_statement},
     error::{ErrorKind, ErrorStack},
     token::TokenList
 };
+use crate::token::RealToken;
 
 static KEYWORDS: [&str; 18] = [
     "clone", "type", "+", "-", "*", "/", "neg", "integer", "float", "string", "boolean", "eval",
@@ -19,22 +21,64 @@ static KEYWORDS: [&str; 18] = [
 ];
 
 pub fn parse(input: &TokenList) -> Result<Chunk, ErrorStack> {
-    let mut i = 0;
+    match consume_chunk(input, 0) {
+        Ok((consumed, chunk)) => {
+            println!("{:#?}", chunk);
+            
+            // check if remaining tokens after EOF
+            if input.1.len() > consumed {
+                return Err(ErrorStack::new(
+                    ErrorKind::UnexpectedToken,
+                    input.0.clone(),
+                    (input.1[consumed].2..).into(),
+                ));
+            }
+            
+            Ok(chunk)
+        },
+        Err(stack) => Err(stack),
+    }
+}
+
+/// This function should not be used to parse an entire file. Consume statements
+/// until EOF or "}" at the first of a line.
+/// 
+/// Notes:
+///  - this function NEVER returns [`ErrorKind::EndOfFile`].
+///  - this function DOES NOT consume the final "}".
+/// 
+/// The return type is not [`Option`] because a chunk can be empty.
+/// 
+/// Returns a chunk and the number of consumed tokens on success, or an error stack
+/// if it fails.
+pub fn consume_chunk(input: &TokenList, mut i: usize) -> Result<(usize, Chunk), ErrorStack> {
     let mut statements = Vec::new();
-    
+    let mut consumed = 0;
+
     loop {
-        let result = consume_statement(input, i);
+        // if "}", we are ending a chunk, return it.
+        if let Some(token) = input.1.get(i) && 
+            let RealToken::Unknown(s) = &token.0 && 
+            s.as_ref() == "}" {
+            break Ok((consumed, Chunk {
+                statements,
+                source: input.0.clone(),
+            }));
+        }
         
+        let result = consume_statement(input, i);
+
         match result {
-            Ok((consumed, statement)) => {
+            Ok((k, statement)) => {
                 statements.push(statement);
-                i += consumed;
+                consumed += k;
+                i += k;
             },
             Err(stack) if matches!(stack.kind(), ErrorKind::EndOfFile) => {
-                break Ok(Chunk {
+                break Ok((consumed, Chunk {
                     statements,
                     source: input.0.clone(),
-                });
+                }));
             },
             Err(stack) => break Err(stack),
         }
