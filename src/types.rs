@@ -4,7 +4,7 @@ use std::{
     fmt::{Debug, Display}, ops::Not, rc::Rc, str::FromStr
 };
 
-use rust_decimal::{prelude::Zero, Decimal, Error};
+use rust_decimal::{prelude::Zero, Decimal};
 
 use crate::{
     frame::Frame,
