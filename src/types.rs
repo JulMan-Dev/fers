@@ -82,6 +82,7 @@ impl Value {
             Value::String(_) => Type::String,
             Value::Boolean(_) => Type::Boolean,
             Value::List(_) => Type::List,
+            Value::Closure(_) => Type::Closure,
         }
     }
 
@@ -110,6 +111,7 @@ impl Value {
                 .map(|ref value| value.simple_string())
                 .collect::<Vec<String>>()
                 .join(", "),
+            Value::Closure(_) => "<closure>".into(),
         }
     }
 
