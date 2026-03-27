@@ -117,7 +117,9 @@ impl Value {
     pub fn try_cast(&self, kind: Type) -> Result<Value, ErrorKind> {
         match (self, kind) {
             (_, Type::Null) => Ok(Value::Null),
-
+            (Value::Closure(_), Type::Closure) => Ok(self.clone()),
+            (Value::Closure(_), _) => Ok(Value::Null), // cannot cast to anything but closure.
+            (_, Type::Closure) => Err(ErrorKind::IllegalCast(Type::Closure, kind)),
             (Value::List(_), Type::List) => Ok(self.clone()),
             (_, Type::List) => Ok(Value::List(vec![self.clone()])),
             (Value::List(_), _) => Err(ErrorKind::IllegalCast(Type::List, kind)),
