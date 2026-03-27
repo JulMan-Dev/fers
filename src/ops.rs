@@ -18,6 +18,13 @@ impl Add for Value {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (_, Value::Null) | (Value::Null, _) => Ok(Value::Null),
+            (a, Value::Closure(_)) | (Value::Closure(_), a) => {
+                Err(ErrorKind::InvalidTypesPair(
+                    Operation::Add,
+                    Type::Closure,
+                    a.kind(),
+                ))
+            }
             (Value::List(mut vec), after) => {
                 vec.push(after);
 
@@ -84,6 +91,13 @@ impl Sub for Value {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (_, Value::Null) | (Value::Null, _) => Ok(Value::Null),
+            (a, Value::Closure(_)) | (Value::Closure(_), a) => {
+                Err(ErrorKind::InvalidTypesPair(
+                    Operation::Sub,
+                    Type::Closure,
+                    a.kind(),
+                ))
+            }
             (prec, Value::List(vec)) | (Value::List(vec), prec) => {
                 let mut vec = vec.clone();
                 let index = vec.iter().position(|x| *x == prec);
@@ -140,6 +154,13 @@ impl Mul for Value {
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (_, Value::Null) | (Value::Null, _) => Ok(Value::Null),
+            (a, Value::Closure(_)) | (Value::Closure(_), a) => {
+                Err(ErrorKind::InvalidTypesPair(
+                    Operation::Mul,
+                    Type::Closure,
+                    a.kind(),
+                ))
+            }
             (Value::Integer(a), Value::Integer(b)) => match a.checked_mul(b) {
                 Some(res) => Ok(res.into()),
                 None => Ok(Value::Null), // Err(ErrorKind::SizeOverflow),
@@ -215,6 +236,13 @@ impl Div for Value {
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (_, Value::Null) | (Value::Null, _) => Ok(Value::Null),
+            (a, Value::Closure(_)) | (Value::Closure(_), a) => {
+                Err(ErrorKind::InvalidTypesPair(
+                    Operation::Div,
+                    Type::Closure,
+                    a.kind(),
+                ))
+            }
             (Value::Integer(a), Value::Integer(b)) => {
                 let a = match integer_to_float(a) {
                     Ok(v) => v,
@@ -277,6 +305,7 @@ impl Neg for Value {
     fn neg(self) -> Self::Output {
         match self {
             Value::Null => Ok(Value::Null),
+            Value::Closure(_) => Err(ErrorKind::InvalidType(Type::Closure)),
             Value::Integer(i) => Ok(i.neg().into()),
             Value::Float(f) => Ok(f.neg().into()),
             Value::String(s) => Ok(s.chars().rev().collect::<String>().into()),
