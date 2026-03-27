@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{types::Type, vm::Operation};
+use crate::frame::FrameAccessError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -50,6 +51,8 @@ pub enum ErrorKind {
     MetaMissingArgument(usize),
     #[doc = "Unexcepted type, excepted..."]
     Excepted(Type),
+    #[doc = "Frame access error"]
+    FrameError(FrameAccessError),
 }
 
 impl fmt::Display for ErrorKind {
@@ -97,7 +100,8 @@ impl fmt::Display for ErrorKind {
             }
             Self::Excepted(t) => {
                 write!(f, "Excepted type {}", t)?;
-            }
+            },
+            Self::FrameError(e) => write!(f, "Frame error: {}", e)?,
         }
 
         Ok(())

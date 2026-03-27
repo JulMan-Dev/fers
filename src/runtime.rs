@@ -26,10 +26,6 @@ where
     W: Write,
 {
     pub source: Rc<str>,
-    pub chunk: Chunk,
-    pub line: usize,
-    pub macros: HashMap<Rc<str>, Rc<BuiltExpression>>,
-    pub variables: HashMap<Rc<str>, Vec<Value>>,
     pub writer: Rc<RefCell<W>>,
 }
 
@@ -68,10 +64,8 @@ impl<W> State<W>
 where
     W: Write,
 {
-    pub fn step(&mut self) -> StateResult {
-        use Statement::*;
-        
-        if self.chunk.statements.len() <= self.line {
+    pub fn step(&self, frame: &Frame) -> StateResult {
+        if frame.chunk().statements.len() <= frame.pc() {
             return Err(ErrorStack::new(
                 ErrorKind::EndOfFile,
                 self.source.clone(),
@@ -79,14 +73,22 @@ where
             ));
         }
 
-        let statement = &self.chunk.statements[self.line];
+        let statement = &frame.chunk().statements[frame.pc()];
+        self.execute_statement(statement, frame)?;
+        frame.set_pc(frame.pc() + 1);
+        Ok(())
+    }
+    
+    pub fn execute_statement(&self, statement: &Statement, frame: &Frame) -> FastResult {
+        use Statement::*;
+        
         match statement {
-            Comment(_) | Blank(_) => {  },
+            Comment(_) | Blank(_) => {},
             Meta(statement) => {
                 let MetaStatement { name, arguments, range } = statement;
-                
+
                 println!("{:#?}", statement);
-                
+
                 // including new file.
                 if name.as_ref() == "include" {
                     let Some(include) = arguments.get(0) else {
@@ -96,7 +98,7 @@ where
                             range.clone(),
                         ));
                     };
-                    
+
                     let Token::String(ref str) = include.token else {
                         return Err(ErrorStack::new(
                             ErrorKind::Excepted(Type::String),
@@ -105,47 +107,69 @@ where
                         ))
                     };
                 }
-                
+
                 todo!();
             }
             Macro(statement) => {
                 let MacroStatement { name, expression, range } = statement;
-                
-                if self.macros.contains_key(name) {
+
+                // a macro already exists in the same block.
+                if let Ok(Some(_)) = frame.get_macro(name) {
                     return Err(ErrorStack::new(
                         ErrorKind::MacroRedefinition,
                         self.source.clone(),
                         range.clone(),
                     ));
-                } 
-                
-                let compiled = self.compile_macro(&expression);
-                self.macros.insert(name.clone(), compiled.into());
+                }
+
+                let compiled = self.compile_macro(&expression, frame);
+
+                if let Err(err) = frame.push_macro(name.clone(), compiled.into()) {
+                    return Err(ErrorStack::new(
+                        ErrorKind::FrameError(err),
+                        self.source.clone(),
+                        range.clone(),
+                    ));
+                }
             }
             Variable(statement) => {
                 let VariableStatement { name, expression, .. } = statement;
-            
+
                 let mut stack = Vec::new();
-                self.execute_expression(&expression, &mut stack, None)?;
-            
-                if stack.is_empty() {
-                    self.variables.remove(name);
+                self.execute_expression(&expression, &mut stack, frame, None)?;
+
+                let result = if stack.is_empty() {
+                    frame.drop_local(name)
                 } else {
-                    self.variables.insert(name.clone(), stack);
+                    frame.push_local(name.clone(), Rc::new(stack))
+                };
+
+                if let Err(err) = result {
+                    return Err(ErrorStack::new(
+                        ErrorKind::FrameError(err),
+                        self.source.clone(),
+                        statement.range.clone(),
+                    ));
                 }
             },
-            Expression(statement) => {
+            Statement::Expression(statement) => {
                 let ExpressionStatement { expression, .. } = statement;
 
                 let mut stack = Vec::new();
-                self.execute_expression(&expression, &mut stack, None)?;
+                self.execute_expression(&expression, &mut stack, frame, None)?;
 
                 if !stack.is_empty() {
-                    self.variables.insert("$".into(), stack.clone());
+                    if let Err(err) = frame.push_local("$".into(), Rc::new(stack.clone())) {
+                        return Err(ErrorStack::new(
+                            ErrorKind::FrameError(err),
+                            self.source.clone(),
+                            statement.range.clone(),
+                        ));
+                    }
                 }
             }
         };
-        self.line += 1;
+        
         Ok(())
     }
 
@@ -156,17 +180,19 @@ where
         &self, 
         expression: &Expression,
         stack: &mut Vec<Value>,
+        frame: &Frame,
         source: Option<Rc<str>>,
     ) -> FastResult {
         // compile expression and do on the compiled.
-        let compiled = self.compile_macro(expression);
-        self.execute_built_expression(Rc::new(compiled), stack, source)
+        let compiled = self.compile_macro(expression, frame);
+        self.execute_built_expression(Rc::new(compiled), stack, frame, source)
     }
     
     pub fn do_token(
         &self,
         token: &BuiltToken,
         stack: &mut Vec<Value>,
+        frame: &Frame,
         source: Option<Rc<str>>,
     ) -> FastResult {
         let make_error_stack = |kind: ErrorKind| -> ErrorStack {
@@ -308,8 +334,16 @@ where
                     unreachable!();
                 };
                 let mut new_stack = Vec::new();
-
-                if let Err(err) = self.execute_expression(&expr.expression, &mut new_stack, Some(str)) {
+                
+                let child_frame = match frame.new_child(
+                    frame.chunk(),
+                    FrameSecurity::new().with_all_unsecured() // TODO: stricter security.
+                ) {
+                    Ok(child_frame) => child_frame,
+                    Err(err) => return Err(make_error_stack(ErrorKind::FrameError(err))),
+                };
+                
+                if let Err(err) = self.execute_expression(&expr.expression, &mut new_stack, &child_frame, Some(str)) {
                     return Err(make_error_stack_with_cause(ErrorKind::EvaluationError, err));
                 }
 
@@ -364,22 +398,22 @@ where
                     return Err(make_error_stack(ErrorKind::Custom(str.clone())));
                 }
             }
-            BuiltOperation::Macro(ref name) => {
-                let Some(macro_definition) = self.macros.get(name) else {
+            Macro(ref name) => {
+                let Ok(Some(macro_definition)) = frame.resolve_macro(name.as_ref()) else {
                     return Err(make_error_stack(ErrorKind::UnexpectedToken));
                 };
                 
-                self.execute_built_expression(macro_definition.clone(), stack, None).map_err(|v| { 
+                self.execute_built_expression(macro_definition.clone(), stack, frame, None).map_err(|v| { 
                     make_error_stack_with_cause(ErrorKind::InMacroExpansion, v)
                 })?;
             }
-            BuiltOperation::KnownMacro(_, ref operations) => {
-                self.execute_built_expression(operations.clone(), stack, None).map_err(|v| {
+            KnownMacro(_, ref operations) => {
+                self.execute_built_expression(operations.clone(), stack, frame, None).map_err(|v| {
                     make_error_stack_with_cause(ErrorKind::InMacroExpansion, v)
                 })?;
             }
-            BuiltOperation::Variable(ref variable) => {
-                let Some(value) = self.variables.get(variable) else {
+            Variable(ref variable) => {
+                let Ok(Some(value)) = frame.resolve_local(variable.as_ref()) else {
                     return Err(make_error_stack(ErrorKind::UndefinedVariable));
                 };
                 
@@ -394,16 +428,17 @@ where
         &self,
         expression: Rc<BuiltExpression>,
         stack: &mut Vec<Value>,
+        frame: &Frame,
         source: Option<Rc<str>>,
     ) -> FastResult {
         for token in expression.iter() {
-            self.do_token(token, stack, source.clone())?;
+            self.do_token(token, stack, frame, source.clone())?;
         }
         
         Ok(())
     }
 
-    pub fn compile_macro(&self, expression: &Expression) -> BuiltExpression {
+    pub fn compile_macro(&self, expression: &Expression, frame: &Frame) -> BuiltExpression {
         use BuiltOperation::*;
 
         let mut tokens = BuiltExpression::new();
@@ -432,9 +467,9 @@ where
                             Variable(identifier.clone())
                         }
                         _ => {
-                            match self.macros.get(identifier) {
-                                None => Macro(identifier.clone()),
-                                Some(expr) => KnownMacro(identifier.clone(), expr.clone()),
+                            match frame.resolve_macro(identifier) {
+                                Err(_) | Ok(None) => Macro(identifier.clone()),
+                                Ok(Some(expr)) => KnownMacro(identifier.clone(), expr.clone()),
                             }
                         }
                     }
@@ -460,23 +495,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("source", &self.source)
-            .field("chunk", &self.chunk)
-            .field("line", &self.line)
-            .field("macros", &self.macros)
             .field("writer", &"dyn std::io::Writer".to_string())
             .finish()
-    }
-}
-
-impl From<Chunk> for State<Stdout> {
-    fn from(chunk: Chunk) -> Self {
-        Self {
-            source: chunk.source.clone(),
-            chunk,
-            line: 0,
-            macros: HashMap::new(),
-            variables: HashMap::new(),
-            writer: Rc::new(RefCell::new(stdout())),
-        }
     }
 }

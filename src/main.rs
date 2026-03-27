@@ -20,6 +20,7 @@ use crate::{
     token::TokenList,
     tty::ansi::RESET
 };
+use crate::frame::Frame;
 
 pub mod device;
 pub mod error;
@@ -33,6 +34,7 @@ pub mod types;
 pub mod utils;
 pub mod vm;
 mod file;
+mod frame;
 
 #[doc = r#"Use for debugging the interpreter. Print the value to the console and returns it."#]
 #[macro_export]
@@ -180,25 +182,25 @@ fn main() {
             };
             
             let parser = match parse(&lexer) {
-                Ok(tokens) => tokens,
+                Ok(tokens) => Rc::new(tokens),
                 Err(err) => {
                     eprintln!("{}Cannot parse {filename}:\n", STYLE.get_sequence());
                     eprintln!("{:#?}", err);
                     return;
                 }
             };
+            
+            println!("{:#?}", parser);
 
-            let mut state = State {
+            let state = State {
                 source: body,
-                chunk: parser,
-                line: 0,
-                macros: Default::default(),
-                variables: Default::default(),
                 writer: Rc::new(RefCell::new(stdout)),
             };
-             
+
+            let frame = Frame::new_unsecured(parser.clone());
+            
             let result = loop {
-                let result = state.step();
+                let result = state.step(&frame);
                     
                 if let Err(ref stack) = result {
                     // Cannot continue, graceful exit
