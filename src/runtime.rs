@@ -51,6 +51,7 @@ pub enum BuiltOperation {
     Neg,
     Clone,
     CastTo(Type),
+    GetType,
     Eval,
     Parse,
     Write,
@@ -256,7 +257,14 @@ where
                     Err(err) => return Err(make_error_stack(err)),
                 });
             }
-            BuiltOperation::Eval => {
+            BuiltOperation::GetType => {
+                let Some(e) = stack.pop() else {
+                    return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
+                };
+
+                stack.push(Value::String(e.kind().to_string().into()));
+            }
+            Eval => {
                 let Some(value) = stack.pop() else {
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(1, stack.len())));
                 };
@@ -414,6 +422,7 @@ where
                         "float" => CastTo(Type::Float),
                         "string" => CastTo(Type::String),
                         "boolean" => CastTo(Type::Boolean),
+                        "type" => GetType,
                         "eval" => Eval,
                         "parse" => Parse,
                         "error" => Error(false),
