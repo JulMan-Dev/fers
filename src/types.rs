@@ -28,6 +28,7 @@ pub enum Type {
     String,
     Boolean,
     List,
+    Closure,
 }
 
 impl Display for Type {
@@ -39,6 +40,7 @@ impl Display for Type {
             Type::String => "string",
             Type::Boolean => "boolean",
             Type::List => "list",
+            Type::Closure => "closure",
         })
     }
 }
