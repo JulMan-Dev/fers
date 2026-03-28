@@ -59,8 +59,8 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
         // so we can return a "Call" node.
         
         let expr_position = expr.position().unwrap();
-        let start_pos = expr_position.start();
-        let end_pos = expr_position.end().unwrap_or(input.0.len() - 1);
+        let start_pos = start_pos;
+        let end_pos = expr_position.end().unwrap_or(input.0.len() - 1) + 2;
         
         // "(" + expr + ")" = consumed + 2 tokens used. 
         return Some(Ok((
@@ -115,12 +115,12 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
         Ok(c) => c,
         Err(err) => return Some(Err(err)),
     };
-    consume_static!(input, j + 1 + body_consumed, "}");
+    let close = consume_static!(input, j + 1 + body_consumed, "}");
     
     // fully parsed closure, return a new node.
     
     let parameters = Rc::from(parameters);
-    let position = body.position().unwrap_or((start_pos, start_pos));
+    let position = (start_pos, close.position.1 + 1);
     
     Some(Ok((
         body_consumed + 2 + j - i, // not index, but the consumed tokens.
