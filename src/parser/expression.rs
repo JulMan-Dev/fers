@@ -12,14 +12,22 @@ pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Express
     // read all tokens to line end, "#" (after it's an inline comment) or ")".
     
     // check if the first token is a ")", error if it is.
-    if let Some(token) = input.1.get(i) && 
-        let RealToken::Unknown(ref k) = token.0 &&
-        k.as_ref() == ")" {
-        return Err(ErrorStack::new(
-            ErrorKind::UnexpectedToken,
-            input.0.clone(),
-            token.clone().into(),
-        ));
+    if let Some(token) = input.1.get(i) && let RealToken::Unknown(ref k) = token.0 {
+        if k.as_ref() == ")" {
+            return Err(ErrorStack::new(
+                ErrorKind::UnexpectedToken,
+                input.0.clone(),
+                token.clone().into(),
+            ));
+        }
+        
+        if k.as_ref() == "{" {
+            return Err(ErrorStack::new(
+                ErrorKind::EndOfBlock,
+                input.0.clone(),
+                token.clone().into(),
+            ))
+        }
     }
 
     let mut list = Expression::new();
@@ -43,6 +51,11 @@ pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Express
             
             // parenthesis end (closure decl or call)
             if k.as_ref() == ")" {
+                break;
+            }
+            
+            // end of block
+            if k.as_ref() == "}" {
                 break;
             }
             

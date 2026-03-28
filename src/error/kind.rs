@@ -43,8 +43,12 @@ pub enum ErrorKind {
     MacroRedefinition,
     #[doc = "End of file, this error is not a user issue"]
     EndOfFile,
+    #[doc = "End of block, this error is not a user issue"]
+    EndOfBlock,
     #[doc = "Unexpected end of line"]
     UnexpectedEndOfLine,
+    #[doc = "Unexpected end of file"]
+    UnexpectedEndOfFile,
     #[doc = "Undefined variable"]
     UndefinedVariable,
     #[doc = "Meta statement is missing arguments"]
@@ -95,7 +99,9 @@ impl fmt::Display for ErrorKind {
             }
             Self::MacroRedefinition => f.write_str("Redefinition of macro")?,
             Self::EndOfFile => f.write_str("End of file, this error is not a user issue")?,
+            Self::EndOfBlock => f.write_str("End of block, this error is not a user issue")?,
             Self::UnexpectedEndOfLine => f.write_str("Unexpected end of line")?,
+            Self::UnexpectedEndOfFile => f.write_str("Unexpected enf of file")?,
             Self::UndefinedVariable => f.write_str("Undefined variable")?,
             Self::MetaMissingArgument(index) => {
                 write!(f, "Missing required {index} arguments {}", if *index > 1 { "s" } else { "" })?;

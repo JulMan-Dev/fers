@@ -55,15 +55,15 @@ pub fn consume_chunk(input: &TokenList, mut i: usize) -> Result<(usize, Chunk), 
     let mut statements = Vec::new();
     let mut consumed = 0;
 
-    loop {
+    let chunk = loop {
         // if "}", we are ending a chunk, return it.
         if let Some(token) = input.1.get(i) && 
             let RealToken::Unknown(s) = &token.0 && 
             s.as_ref() == "}" {
-            break Ok((consumed, Chunk {
+            break Ok(Chunk {
                 statements,
                 source: input.0.clone(),
-            }));
+            });
         }
         
         let result = consume_statement(input, i);
@@ -74,15 +74,17 @@ pub fn consume_chunk(input: &TokenList, mut i: usize) -> Result<(usize, Chunk), 
                 consumed += k;
                 i += k;
             },
-            Err(stack) if matches!(stack.kind(), ErrorKind::EndOfFile) => {
-                break Ok((consumed, Chunk {
+            Err(stack) if matches!(stack.kind(), ErrorKind::EndOfFile | ErrorKind::EndOfBlock) => {
+                break Ok(Chunk {
                     statements,
                     source: input.0.clone(),
-                }));
+                });
             },
             Err(stack) => break Err(stack),
         }
-    }
+    }?;
+    
+    Ok((consumed, chunk))
 }
 
 // #[derive(Debug, PartialEq, Eq, Clone)]
