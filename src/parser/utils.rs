@@ -4,18 +4,36 @@ use crate::parser::ast::{Token, TokenMeta};
 use crate::parser::token::process_token;
 use crate::token::{LexToken, RealToken, TokenList};
 
-pub fn consume_static(input: &TokenList, i: usize, text: &str) -> Option<TokenMeta> {
+pub fn consume_static(input: &TokenList, i: usize, text: &str) -> Result<TokenMeta, ErrorStack> {
     let token = input.1.get(i);
     
     if let Some(token) = token {
         if let LexToken(RealToken::Unknown(k), _, _) = token && k.as_ref() == text {
-            Some(process_token(token))
+            Ok(process_token(token))
         } else {
-            None
+            Err(ErrorStack::new(
+                ErrorKind::UnexpectedToken,
+                input.0.clone(),
+                token.clone().into(),
+            ))
         }
     } else {
-        None
+        Err(ErrorStack::new(
+            ErrorKind::UnexpectedEndOfFile,
+            input.0.clone(),
+            (input.0.len() - 1..input.0.len()).into(),
+        ))
     }
+}
+
+#[macro_export]
+macro_rules! consume_static {
+    ($input:expr, $i:expr, $text:expr) => {
+        match consume_static($input, $i, $text) {
+            Ok(node) => node,
+            Err(err) => return Some(Err(err)),
+        }
+    };
 }
 
 pub fn consume_identifier(input: &TokenList, i: usize) -> Result<(usize, Rc<str>), ErrorStack> {
@@ -43,7 +61,7 @@ pub fn consume_identifier(input: &TokenList, i: usize) -> Result<(usize, Rc<str>
         }
     } else {
         Err(ErrorStack::new(
-            ErrorKind::UnexpectedEndOfLine,
+            ErrorKind::UnexpectedEndOfFile,
             input.0.clone(),
             (..input.0.len() - 1).into(),
         ))

@@ -1,15 +1,11 @@
 use std::rc::Rc;
 
-use crate::{
-    parser::{
-        expression::consume_expression,
-        consume_chunk,
-        ast::{CallExpression, Expression, Token, TokenMeta, ClosureExpression},
-        utils::consume_static
-    },
-    error::{ErrorKind, ErrorStack},
-    token::TokenList
-};
+use crate::{parser::{
+    expression::consume_expression,
+    consume_chunk,
+    ast::{CallExpression, Expression, Token, TokenMeta, ClosureExpression},
+    utils::consume_static
+}, error::{ErrorKind, ErrorStack}, token::TokenList, consume_static};
 
 impl ClosureExpression {
     /// Helper function to get arity of the closure.
@@ -22,16 +18,16 @@ impl ClosureExpression {
 // closure := "(" arguments * ")" "->" { statement * }
 // call := "(" expr_node ")"
 pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(usize, TokenMeta), ErrorStack>> {
-    let lparent = consume_static(input, i, "(")?;
+    let lparent = consume_static!(input, i, "(");
     let start_pos = lparent.position.0;
     
     println!("Consuming a closure or call: {:?}", input.1.iter().skip(i).take(10).collect::<Vec<_>>());
     
     let (parameters, consumed) = 'can_be_call: {
         // we check if i + 1 is ")"
-        if consume_static(input, i + 1, ")").is_some() {
+        if consume_static(input, i + 1, ")").is_ok() {
             // we need to check if there is "->" after the ")"
-            if consume_static(input, i + 2, "->").is_some() {
+            if consume_static(input, i + 2, "->").is_ok() {
                 break 'can_be_call (Expression::new(), 2usize);
             }
          
@@ -52,10 +48,10 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
             Err(err) => return Some(Err(err)),
         };
         
-        consume_static(input, i + consumed + 1, ")")?;
+        consume_static!(input, i + consumed + 1, ")");
         
         // check if the after ")", there is "->"
-        if consume_static(input, i + consumed + 2, "->").is_some() {
+        if consume_static(input, i + consumed + 2, "->").is_ok() {
             break 'can_be_call (expr, consumed + 2);
         }
         
@@ -114,12 +110,12 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
     };
     
     // we need to consume a chunk (closure body)
-    consume_static(input, j, "{")?;
+    consume_static!(input, j, "{");
     let (body_consumed, body) = match consume_chunk(input, j + 1) {
         Ok(c) => c,
         Err(err) => return Some(Err(err)),
     };
-    consume_static(input, j + 1 + body_consumed, "}")?;
+    consume_static!(input, j + 1 + body_consumed, "}");
     
     // fully parsed closure, return a new node.
     

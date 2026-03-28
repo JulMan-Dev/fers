@@ -15,7 +15,7 @@ use crate::parser::KEYWORDS;
 pub fn consume_macro(input: &TokenList, i: usize) -> Option<Result<(usize, MacroStatement), ErrorStack>> {
     // <name> ":" expression
     
-    let colon = consume_static(input, i + 1, ":")?;
+    let colon = consume_static(input, i + 1, ":").ok()?;
     let (start_pos, name) = match consume_identifier(input, i) {
         Ok(kv) => kv,
         Err(e) => return Some(Err(e)),

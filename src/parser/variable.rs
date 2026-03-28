@@ -1,17 +1,13 @@
 //! Parses variable declarations
 
-use crate::{
-    parser::{
-        utils::{consume_identifier, consume_static},
-        expression::consume_expression,
-        ast::VariableStatement
-    },
-    error::{ErrorKind, ErrorStack},
-    token::TokenList
-};
+use crate::{parser::{
+    utils::{consume_identifier, consume_static},
+    expression::consume_expression,
+    ast::VariableStatement
+}, error::{ErrorKind, ErrorStack}, token::TokenList, consume_static};
 
 pub fn consume_variable(input: &TokenList, i: usize) -> Option<Result<(usize, VariableStatement), ErrorStack>> {
-    let r#let = consume_static(input, i, "let")?;
+    let r#let = consume_static(input, i, "let").ok()?;
     let start_pos = r#let.position.0;
     
     let (_, name) = match consume_identifier(input, i + 1) {
@@ -27,7 +23,7 @@ pub fn consume_variable(input: &TokenList, i: usize) -> Option<Result<(usize, Va
         )));
     }
     
-    let equal = consume_static(input, i + 2, "=")?;
+    let equal = consume_static!(input, i + 2, "=");
     
     let (size, expression) = match consume_expression(input, i + 3) {
         Ok(kv) => kv,
