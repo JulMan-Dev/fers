@@ -30,7 +30,18 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
     let (parameters, consumed) = 'can_be_call: {
         // we check if i + 1 is ")"
         if consume_static(input, i + 1, ")").is_some() {
-            break 'can_be_call (Expression::new(), 1usize);
+            // we need to check if there is "->" after the ")"
+            if consume_static(input, i + 2, "->").is_some() {
+                break 'can_be_call (Expression::new(), 2usize);
+            }
+         
+            // cannot return an empty Call node, throw
+            let last_token = input.1.get(i).unwrap();
+            return Some(Err(ErrorStack::new(
+                ErrorKind::UnexpectedToken,
+                input.0.clone(),
+                (start_pos..last_token.end_position()).into(),
+            )));
         }
 
         // we need to consume an expression and check there is no "->" after
@@ -79,7 +90,7 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
             let index = j + k;
             
             if let Token::Identifier(var) = &token.token {
-                if var.starts_with('$') || var.as_ref() != "$" {
+                if var.starts_with('$') && var.as_ref() != "$" {
                     p.push(var.to_owned());
                 } else {
                     // raise an unexpected token
@@ -89,6 +100,13 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
                         (token.position.0..token.position.1).into(),
                     )));
                 }
+            } else {
+                // required, enforcing an identifier.
+                return Some(Err(ErrorStack::new(
+                    ErrorKind::UnexpectedToken,
+                    input.0.clone(),
+                    (token.position.0..token.position.1).into(),
+                )))
             }
         }
 
