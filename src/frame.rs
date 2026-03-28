@@ -23,6 +23,7 @@ struct __Frame {
     locals: HashMap<Rc<str>, Rc<Vec<Value>>>,
     macros: HashMap<Rc<str>, Rc<BuiltExpression>>,
     parent: Option<Frame>,
+    caller: Option<Frame>,
     children: Vec<WeakFrame>,
     pc: usize,
     chunk: Rc<Chunk>,
@@ -114,6 +115,7 @@ impl Frame {
             locals: HashMap::new(),
             macros: HashMap::new(),
             parent: None,
+            caller: None,
             children: Vec::new(),
             pc: 0,
             chunk,
@@ -134,6 +136,7 @@ impl Frame {
             locals: HashMap::new(),
             macros: HashMap::new(),
             parent: Some(self.clone()),
+            caller: None,
             children: Vec::new(),
             pc: 0,
             chunk,
@@ -363,6 +366,31 @@ impl Frame {
     /// Gets the chunk that the frame belongs to.
     pub fn chunk(&self) -> Rc<Chunk> {
         self.inner.borrow().chunk.clone()
+    }
+    
+    /// Gets the depth of the frame in the call stack. It checks for callers recursively.
+    /// 
+    /// Returns the number of frames between this frame and the root frame.
+    pub fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut current = self.inner.borrow().caller.clone();
+        
+        while let Some(frame) = current {
+            depth += 1;
+            current = frame.inner.borrow().caller.clone();
+        }
+        
+        depth
+    }
+    
+    /// Sets the caller frame.
+    pub fn set_caller(&mut self, caller: Option<Frame>) {
+        self.inner.borrow_mut().caller = caller;
+    }
+    
+    /// Gets the caller frame.
+    pub fn caller(&self) -> Option<Frame> {
+        self.inner.borrow().caller.clone()
     }
 }
 

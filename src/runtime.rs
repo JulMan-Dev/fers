@@ -77,6 +77,15 @@ where
                 (0..).into(),
             ));
         }
+        
+        // checking for stack overflow.
+        if frame.depth() > 400 {
+            return Err(ErrorStack::new(
+                ErrorKind::StackOverflow,
+                self.source.clone(),
+                (0..1).into(), // dummy range for stack overflow
+            ));
+        }
 
         let statement = &frame.chunk().statements[frame.pc()];
         self.execute_statement(statement, frame)?;
@@ -351,7 +360,7 @@ where
                 };
                 let mut new_stack = Vec::new();
                 
-                let child_frame = match frame.new_child(
+                let mut child_frame = match frame.new_child(
                     frame.chunk(),
                     FrameSecurity::new().with_all_unsecured() // TODO: stricter security.
                 ) {
@@ -359,7 +368,14 @@ where
                     Err(err) => return Err(make_error_stack(ErrorKind::FrameError(err))),
                 };
                 
-                if let Err(err) = self.execute_expression(&expr.expression, &mut new_stack, &child_frame, Some(str)) {
+                // setting caller frame
+                child_frame.set_caller(Some(frame.clone()));
+                
+                if let Err(mut err) = self.execute_expression(&expr.expression, &mut new_stack, &child_frame, Some(str)) {
+                    if err.kind() == &ErrorKind::StackOverflow {
+                        err.range = token.position.to_range();
+                    }
+                    
                     return Err(make_error_stack_with_cause(ErrorKind::EvaluationError, err));
                 }
 
@@ -462,13 +478,16 @@ where
                     return Err(make_error_stack(ErrorKind::InvalidNumberArguments(arity, stack.len())));
                 }
                 
-                let child_frame = match to_call.parent.new_child(
+                let mut child_frame = match to_call.parent.new_child(
                     to_call.body,
                     FrameSecurity::new().with_all_unsecured()
                 ) {
                     Ok(child_frame) => child_frame,
                     Err(err) => return Err(make_error_stack(ErrorKind::FrameError(err))),
                 };
+                
+                // setting caller frame
+                child_frame.set_caller(Some(frame.clone()));
                 
                 // push the arguments to the child frame.
                 for arg in to_call.parameters.iter().rev() {
@@ -493,7 +512,14 @@ where
                 
                 match result {
                     Ok(()) => (),
-                    Err(err) => return Err(make_error_stack_with_cause(ErrorKind::EvaluationError, err)),
+                    Err(mut err) => {
+                        if err.kind() == &ErrorKind::StackOverflow {
+                            // updates the position of the error
+                            err.range = token.position.to_range();
+                        }
+                        
+                        return Err(make_error_stack_with_cause(ErrorKind::EvaluationError, err))
+                    },
                 }
                 
                 // get "$" and push back to the stack.

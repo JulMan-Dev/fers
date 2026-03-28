@@ -19,7 +19,7 @@ pub const CONTEXT_SIZE: usize = 3;
 pub struct ErrorStack {
     kind: ErrorKind,
     source: Rc<str>,
-    range: PositionRange,
+    pub range: PositionRange,
     cause: Option<Box<ErrorStack>>,
 }
 
@@ -41,6 +41,13 @@ impl ErrorStack {
         source: Rc<str>,
         range: PositionRange,
     ) -> Self {
+        // if the cause is a stack overflow, we don't want to wrap it in another stack overflow,
+        // else we will produce a very large stack trace.
+        // (it may use a lot of memory)
+        if cause.kind == ErrorKind::StackOverflow {
+            return cause;
+        }
+        
         Self {
             kind,
             cause: Some(Box::new(cause)),

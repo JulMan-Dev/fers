@@ -53,6 +53,8 @@ pub enum ErrorKind {
     Excepted(Type),
     #[doc = "Frame access error"]
     FrameError(FrameAccessError),
+    #[doc = "Stack overflow"]
+    StackOverflow,
 }
 
 impl fmt::Display for ErrorKind {
@@ -102,6 +104,7 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Excepted type {}", t)?;
             },
             Self::FrameError(e) => write!(f, "Frame error: {}", e)?,
+            Self::StackOverflow => f.write_str("Stack overflow")?,
         }
 
         Ok(())
