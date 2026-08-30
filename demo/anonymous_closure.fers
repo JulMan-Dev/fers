@@ -1,0 +1,5 @@
+println: string "\n" + write
+
+2 (($x) -> {
+  $x 1 +
+}) println

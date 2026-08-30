@@ -2,6 +2,33 @@ let $double = ($x) -> {
     2 $x *
 }
 
+let $add = ($x $y) -> {
+    let $result = $x $y +
+    
+    $result
+}
+
+let $->curry = ($x $f) -> {
+    ($y) -> {
+        $x $y ($f)
+    }
+}
+
+let $∘ = ($f $g) -> {
+    ($x) -> {
+        $x ($g) ($f)
+    }
+}
+
 println: string "\n" + write
 
-2 ($double) println
+let $add_10_then_double = $double 10 $add ($->curry) ($∘)
+
+20 ($add_10_then_double) println
+
+let $salut = ($x) -> {
+    2 $x *
+    $ $ 
+}
+
+2 ($salut) + println

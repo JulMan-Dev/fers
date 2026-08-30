@@ -1,0 +1,26 @@
+println: string "\n" + write
+
++F: (($f $g) -> {
+  ($x) -> {
+    $x ($f) $x ($g) +
+  }
+})
+
+*F: (($f $g) -> {
+  ($x) -> {
+    $x ($f) $x ($g) *
+  }
+})
+
+let $f = ($x) -> {
+  $x 1 +
+}
+let $g = ($x) -> {
+  $x 2 *
+}
+
+let $h = $f $g +F
+let $i = $f $g *F
+
+10 ($h) println
+10 ($i) println
