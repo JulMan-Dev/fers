@@ -7,6 +7,7 @@ pub(crate) mod meta;
 pub(crate) mod variable;
 pub(crate) mod utils;
 pub(crate) mod closure;
+mod string_templating;
 
 use crate::{
     parser::{ast::Chunk, statement::consume_statement},
@@ -23,8 +24,6 @@ static KEYWORDS: [&str; 18] = [
 pub fn parse(input: &TokenList) -> Result<Chunk, ErrorStack> {
     match consume_chunk(input, 0) {
         Ok((consumed, chunk)) => {
-            println!("{:#?}", chunk);
-            
             // check if remaining tokens after EOF
             if input.1.len() > consumed {
                 return Err(ErrorStack::new(

@@ -57,7 +57,7 @@ impl RealToken {
 pub struct TokenList(pub Rc<str>, pub Vec<LexToken>);
 
 fn is_char_word_break(c: char) -> bool {
-    matches!(c, ':' | '=' | '(' | ')' | '&')
+    matches!(c, ':' | '=' | '(' | ')' | '&' | '`' | '\\')
 }
 
 impl FromStr for TokenList {

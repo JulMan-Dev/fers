@@ -7,6 +7,7 @@ use crate::{
     parser::ast::Expression,
     parser::closure::consume_closure_or_call,
 };
+use crate::parser::string_templating::consume_string_template;
 
 pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Expression), ErrorStack> {
     // read all tokens to line end, "#" (after it's an inline comment) or ")".
@@ -35,8 +36,6 @@ pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Express
     let mut consumed = 0;
     let mut i = i;
     while let Some(token) = input.1.get(i) {
-        println!("{:?}", token);
-        
         if let RealToken::Unknown(ref k) = token.0 {
             if k.as_ref() == "(" {
                 if let Some(closure) = consume_closure_or_call(input, i) {
@@ -45,6 +44,13 @@ pub fn consume_expression(input: &TokenList, i: usize) -> Result<(usize, Express
                     list.push(token);
                     consumed += k;
                     i += k;
+                    continue;
+                }
+            }
+            
+            if k.as_ref() == "`" {
+                if let Some(closure) = consume_string_template(input, i) {
+                    todo!();
                     continue;
                 }
             }

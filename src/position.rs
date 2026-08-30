@@ -36,23 +36,31 @@ impl PositionRange {
     }
 
     pub fn size_clamped(&self, from: &Rc<str>) -> usize {
-        let start = self.0.min(from.len());
-        let end = self.1.unwrap_or(usize::MAX).min(from.len() - 1);
+        let count = from.chars().count();
+        let start = self.0.min(count);
+        let end = self.1.unwrap_or(usize::MAX).min(count - 1);
 
         end - start
     }
 
     pub fn get_slice(&self, from: &Rc<str>) -> Option<String> {
-        let start = self.0.clamp(0, from.len());
+        // this is char-indexed, not byte-index.
+        
+        let count = from.chars().count();
+        let start = self.0.clamp(0, count);
 
         match self.1 {
             Some(end) => {
-                let end = end.clamp(start, from.len());
-
-                from.get(start..end).map(|s| s.to_owned())
+                let end = end.clamp(start, count);
+                
+                if end <= start {
+                    return None;
+                }
+                
+                Some(from.chars().skip(start).take(end - start).collect())
             }
             None => {
-                from.get(start..).map(|s| s.to_owned())
+                Some(from.chars().skip(start).collect())
             }
         }
     }

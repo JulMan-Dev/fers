@@ -21,8 +21,6 @@ pub fn consume_closure_or_call(input: &TokenList, i: usize) -> Option<Result<(us
     let lparent = consume_static!(input, i, "(");
     let start_pos = lparent.position.0;
     
-    println!("Consuming a closure or call: {:?}", input.1.iter().skip(i).take(10).collect::<Vec<_>>());
-    
     let (parameters, consumed) = 'can_be_call: {
         // we check if i + 1 is ")"
         if consume_static(input, i + 1, ")").is_ok() {

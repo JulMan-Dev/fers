@@ -101,7 +101,7 @@ where
             Meta(statement) => {
                 let MetaStatement { name, arguments, range } = statement;
 
-                println!("{:#?}", statement);
+                // println!("{:#?}", statement);
 
                 // including new file.
                 if name.as_ref() == "include" {

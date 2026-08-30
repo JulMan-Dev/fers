@@ -3,10 +3,10 @@ use std::{
     cell::RefCell,
     rc::Rc,
     env::args,
-    fs,
     io::{stdin, stdout},
     str::FromStr
 };
+use std::fs::read_to_string;
 use tty::{
     ansi::{NoColor, Style},
     simple::Color4,
@@ -35,6 +35,8 @@ pub mod utils;
 pub mod vm;
 mod file;
 mod frame;
+pub mod testing;
+pub mod fs;
 
 #[doc = r#"Use for debugging the interpreter. Print the value to the console and returns it."#]
 #[macro_export]
@@ -158,7 +160,7 @@ fn main() {
             
             let stats = submatches.get_flag("stats");
             
-            let body = match fs::read_to_string(filename) {
+            let body = match read_to_string(filename) {
                 Ok(content) => content,
                 Err(err) => {
                     eprintln!(
@@ -190,7 +192,7 @@ fn main() {
                 }
             };
             
-            println!("{:#?}", parser);
+            // println!("{:#?}", parser);
 
             let state = State {
                 source: body,
